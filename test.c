@@ -1,91 +1,82 @@
 #include<stdio.h>
 #include<unistd.h>
 #include<sys/socket.h>
-#include<errno.h>
-#include<string.h>
-#include<arpa/inet.h>
+#include<sys/time.h>
 #include<sys/types.h>
-#include<sys/wait.h>
-#include<signal.h>
-#include<pthread.h>
+#include<arpa/inet.h>
+#include<string.h>
+#include<errno.h>
+
 #define PORT 9527
-
-struct message{
-	struct sockaddr_in p_sock;
-	int connid;
-};
-void *comeback(void *arg)
-{
-	char client_IP_TMP[BUFSIZ];
-	char BUF_TMP[BUFSIZ];
-	int ret_tmp = 0;
-	struct message *mess = (struct message *) arg;
-	fprintf(stdout, "client_IP = %s, client_port = %lu\n", inet_ntop(AF_INET, (void *) &mess->p_sock.sin_addr.s_addr, client_IP_TMP, BUFSIZ), ntohs(mess->p_sock.sin_port));
-
-	while(1)
-	{
-		ret_tmp	= read(mess->connid, BUF_TMP, BUFSIZ);
-		if(ret_tmp == -1)
-			fprintf(stderr, "read error: %s\n", strerror(errno));
-		if(ret_tmp == 0)
-		{
-			fprintf(stderr, "client thread %d is closed\n", pthread_self());
-			break;
-		}
-		write(STDOUT_FILENO, BUF_TMP, ret_tmp);
-
-		for(int i = 0; i < ret_tmp; ++i)
-			BUF_TMP[i] = toupper(BUF_TMP[i]);
-		write(mess->connid, BUF_TMP, ret_tmp);
-	}
-
-	close(mess->connid);
-	pthread_exit(0);
-}
 
 int main()
 {
-	int ret, i = 0;
-	int fd, fd1;
-	pthread_t tid;
-	struct message mess[128];
-	struct sockaddr_in server_sock, server_sock1;
-	socklen_t server_sock1_len;
+	int listen_fd, client_fd;
+	int client_port;
+	char client_id[BUFSIZ];
+	int ret = 0, max_fd = 1, count = 0;
+	struct sockaddr_in server_addr, client_addr;
+	char BUF[BUFSIZ];
 
+	listen_fd = socket(AF_INET, SOCK_STREAM, 0);
+  if(listen_fd == -1) fprintf(stderr, "socket error: %s\n", strerror(errno));
+	
+	server_addr.sin_family = AF_INET;
+	server_addr.sin_port = htons(9527);
+	server_addr.sin_addr.s_addr = htonl(INADDR_ANY);
 
-	fd = socket(AF_INET, SOCK_STREAM, 0);
-	if(fd == -1)
-		fprintf(stderr, "socket error:%s\n", strerror(errno));
+	ret = bind(listen_fd, (struct sockaddr *)&server_addr, sizeof(server_addr));
+	if(ret == -1) fprintf(stderr, "bind error: %s\n", strerror(errno));
 
+	ret = listen(listen_fd, 128);
+	if(ret == -1) fprintf(stderr, "listen error: %s\n", strerror(errno));
+	
+	fd_set r_set, m_set;
+	max_fd = listen_fd;
 
-	server_sock.sin_family = AF_INET;
-	server_sock.sin_port = htons(PORT);
-	server_sock.sin_addr.s_addr = htonl(INADDR_ANY);
-
-	ret = bind(fd, (struct sockaddr *)&server_sock, sizeof(server_sock));
-	if(ret == -1)
-		fprintf(stderr, "bind error:%s\n", strerror(errno));
-
-	ret = listen(fd, 10);
-	if(ret == -1)
-		fprintf(stderr, "listen error:%s\n", strerror(errno));
-
-		fprintf(stdout, "accepting client connect...\n");
+	FD_ZERO(&r_set);
+	FD_ZERO(&m_set);
+	FD_SET(listen_fd, &r_set);
 	while(1){
-		server_sock1_len = sizeof(server_sock1);
-		fd1 = accept(fd, (struct sockaddr *)&server_sock1, &server_sock1_len);
-		if(fd1 == -1){
-			fprintf(stderr, "accept error: %s\n", strerror(errno));
-			continue;
+		m_set = r_set;
+
+	 	ret  = select(max_fd + 1, &m_set, NULL, NULL, NULL);
+		if(ret == -1) fprintf(stderr, "select error: %s\n", strerror(errno));
+		if(FD_ISSET(listen_fd, &m_set)){
+			socklen_t client_len = sizeof(client_addr);
+			
+			client_fd  = accept(listen_fd, (struct sockaddr *)&client_addr, &client_len);
+			if(client_fd == -1) fprintf(stderr, "accept error: %s\n", strerror(errno));
+		
+			inet_ntop(AF_INET, (void *) &client_addr.sin_addr.s_addr, client_id, BUFSIZ);
+			client_port = ntohs(client_addr.sin_port);
+			fprintf(stdout, "Client IP = %s, Client port = %d is connected\n", client_id, client_port);
+
+			FD_SET(client_fd, &r_set);
+			if(max_fd < client_fd) max_fd = client_fd;
+
+			if(ret == 1) continue;
 		}
-		else
-		{
-			mess[i].connid = fd1;
-			mess[i].p_sock = server_sock1;
-			pthread_create(&tid, NULL, comeback, (void *)&mess[i]);
-			pthread_detach(tid);
-			++i;
+
+		for(int i = listen_fd + 1; i < max_fd + 1; ++i){
+			if(FD_ISSET(i, &m_set)){
+				ret = read(i, BUF, BUFSIZ);
+				if(ret == 0){
+					fprintf(stderr, "%d is closed..\n", i);
+					close(i);
+					FD_CLR(i, &r_set);
+				}else if(ret > 0){
+					write(STDOUT_FILENO, BUF, ret);
+					for(int j = 0; j < ret; ++j)
+						BUF[j] = toupper(BUF[j]);
+					write(i, BUF, ret);
+				}else{
+					fprintf(stderr, "read error %s\n", strerror(errno));
+				}
+			}
 		}
 	}
+	close(listen_fd);
 	return 0;
-} 
+}
+
