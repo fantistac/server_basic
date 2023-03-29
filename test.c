@@ -11,7 +11,7 @@
 #include<stddef.h>
 
 #define PORT 9527
-#define SERVER_ADDR "server_file.socket"
+#define SERVER_ADDR "/home/fantistac/NJUPA/test/server_file.socket"
 int main()
 {
 	int sockfd, client_fd;
@@ -46,23 +46,26 @@ int main()
 		}	
 		client_len -= offsetof(struct sockaddr_un, sun_path);
 		client_addr.sun_path[client_len] ='\0';	
-		fprintf(stderr, "client socket = %s\n", client_addr.sun_path);  
+		fprintf(stderr, "client socket = %s\n", client_addr.sun_path);
+		while(1){	
 		ret = read(client_fd, BUF, BUFSIZ);
 		if (ret == -1){
 			fprintf(stderr, "recvfrom error:%s\n", strerror(errno));
 			exit(-1);
 		} 
 		else if(ret == 0){ 
-			fprintf(stderr, "client %s is closed\n", client_addr.sun_path);			 close(client_fd);
+			fprintf(stderr, "client %s is closed\n", client_addr.sun_path);			
+		 	close(client_fd);
 			exit(0);
 		}else{
 		write(STDOUT_FILENO, BUF, ret);
 		for(int j = 0; j < ret; ++j){ 
 				BUF[j] = toupper(BUF[j]);
- 		} 
+ 		}  
 		client_len += offsetof(struct sockaddr_un, sun_path);	
 		write(client_fd, BUF, ret);
 		}
+	}
 	}
 	close(sockfd);	
 	return 0;

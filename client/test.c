@@ -9,8 +9,8 @@
 #include<sys/un.h>
 #include<stddef.h>
 
-#define CLIENT_ADDR "client_file.socket"
-#define SERVER_ADDR "server_file.socket"
+#define CLIENT_ADDR "/home/fantistac/NJUPA/test/client/client_file.socket"
+#define SERVER_ADDR "/home/fantistac/NJUPA/test/server_file.socket"
 
 int main()
 {
