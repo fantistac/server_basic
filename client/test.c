@@ -18,7 +18,7 @@ int main()
 	int fd = 0, ret = 0;
 	char BUF[BUFSIZ];
 	socklen_t server_len, client_len;
-	fd = socket(AF_UNIX, SOCK_STREAM, 0);
+	fd = socket(AF_UNIX, SOCK_DGRAM, 0);
 	if(fd == -1)
 	fprintf(stderr, "socket error: %s\n", strerror(errno));
 
@@ -33,22 +33,20 @@ int main()
 
 	bind(fd, (struct sockaddr *)&client_addr, client_len);
 
-	ret = connect(fd, (struct sockaddr *)&server_addr, server_len);
-	if(ret == -1)
-			fprintf(stderr, "connect error: %s\n", strerror(errno));
+	
 	while( fgets(BUF, BUFSIZ, stdin) ){ 
-		int ret = write(fd, BUF, strlen(BUF));
+		int ret = sendto(fd, BUF, strlen(BUF), 0, (struct sockaddr *)&server_addr, server_len);
 		if(ret == -1)
-				fprintf(stderr, "write error: %s\n", strerror(errno));
+				fprintf(stderr, "sendto error: %s\n", strerror(errno));
 		else{ 
-				ret = read(fd, BUF, BUFSIZ);
+				ret = recvfrom(fd, BUF, BUFSIZ, 0, NULL, NULL);
 				if(ret == -1)
 					fprintf(stderr, "read error: %s\n", strerror(errno));
 
 				write(STDOUT_FILENO, BUF, ret);
 				if(ret == -1)
 						fprintf(stderr, "write error: %s\n", strerror(errno));
-		}   
+		}    
 	}
 	close(fd);
 	return 0;

@@ -22,7 +22,7 @@ int main()
 	socklen_t client_len, server_len;
 	char BUF[BUFSIZ];
 
-	sockfd = socket(AF_UNIX, SOCK_STREAM, 0);
+	sockfd = socket(AF_UNIX, SOCK_DGRAM, 0);
   if(sockfd == -1) fprintf(stderr, "socket error: %s\n", strerror(errno));
 	
 	unlink(SERVER_ADDR);
@@ -39,34 +39,27 @@ int main()
 	{
 
 		client_len = sizeof(client_addr);
-		client_fd = accept(sockfd, (struct sockaddr *)&client_addr, &client_len);
-		if(client_fd == -1) {
-			fprintf(stderr, "accept error:\n", strerror(errno));
-			exit(-1);
-		}	
-		client_len -= offsetof(struct sockaddr_un, sun_path);
-		client_addr.sun_path[client_len] ='\0';	
-		fprintf(stderr, "client socket = %s\n", client_addr.sun_path);
-		while(1){	
-		ret = read(client_fd, BUF, BUFSIZ);
+		ret = recvfrom(sockfd, BUF, BUFSIZ, 0, (struct sockaddr *)&client_addr, &client_len);
 		if (ret == -1){
 			fprintf(stderr, "recvfrom error:%s\n", strerror(errno));
 			exit(-1);
-		} 
+		}  
 		else if(ret == 0){ 
 			fprintf(stderr, "client %s is closed\n", client_addr.sun_path);			
-		 	close(client_fd);
 			exit(0);
-		}else{
+		}else{	
+		client_len -= offsetof(struct sockaddr_un, sun_path);
+		client_addr.sun_path[client_len] ='\0';	
+		fprintf(stderr, "client socket = %s is connecting\n", client_addr.sun_path);
 		write(STDOUT_FILENO, BUF, ret);
 		for(int j = 0; j < ret; ++j){ 
 				BUF[j] = toupper(BUF[j]);
- 		}  
+ 		}   
 		client_len += offsetof(struct sockaddr_un, sun_path);	
-		write(client_fd, BUF, ret);
+		sendto(sockfd, BUF, ret, 0, (struct sockaddr *)&client_addr, client_len);
 		}
-	}
-	}
+	} 
+	 
 	close(sockfd);	
 	return 0;
 }
